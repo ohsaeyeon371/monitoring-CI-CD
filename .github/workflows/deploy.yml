@@ -56,7 +56,13 @@ jobs:
           mkdir -p ~/.kube
           printf '%s' "${{ secrets.KUBECONFIG_B64 }}" | tr -d '\n\r ' | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
-
+      - name: Validate kubeconfig secret
+        shell: bash
+        run: |
+          echo "len=${#KUBECONFIG_B64}"
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+          
       - name: Ensure namespace
         run: |
           kubectl get ns "${{ secrets.NAMESPACE }}" >/dev/null 2>&1 || kubectl create ns "${{ secrets.NAMESPACE }}"
