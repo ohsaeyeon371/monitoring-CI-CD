@@ -1,60 +1,67 @@
 name: build-and-deploy
 
 on:
- push:
-   branches: ["main"]
+  push:
+    branches: ["main"]
 
 permissions:
- contents: read
- packages: write
+  contents: read
+  packages: write
 
 env:
- IMAGE_NAME: test-app
+  IMAGE_NAME: test-app
 
 jobs:
- build_deploy:
-   runs-on: ubuntu-latest
+  build_deploy:
+    runs-on: ubuntu-latest
 
-   steps:
-     - name: Checkout
-       uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-     - name: Set vars
-       run: |
-         echo "IMAGE=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
-         echo "TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+      - name: Set vars
+        run: |
+          echo "IMAGE=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+          echo "TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
-     - name: Login to GHCR
-       uses: docker/login-action@v3
-       with:
-         registry: ghcr.io
-         username: ${{ github.repository_owner }}
-         password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-     - name: Build & Push
-       uses: docker/build-push-action@v6
-       with:
-         context: .
-         push: true
-         tags: |
-           ${{ env.IMAGE }}:${{ env.TAG }}
-           ${{ env.IMAGE }}:latest
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.TAG }}
+            ${{ env.IMAGE }}:latest
 
-     - name: Setup kubeconfig
-       run: |
-         mkdir -p ~/.kube
-         echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
-         chmod 600 ~/.kube/config
+      - name: Setup kubeconfig
+        shell: bash
+        run: |
+          mkdir -p ~/.kube
+          printf '%s' "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
 
-     - name: Ensure namespace
-       run: |
-         kubectl get ns "${{ secrets.NAMESPACE }}" >/dev/null 2>&1 || kubectl create ns "${{ secrets.NAMESPACE }}"
+      - name: Debug kubeconfig
+        run: |
+          kubectl config get-contexts
+          kubectl config current-context || true
+          kubectl cluster-info
 
-     - name: Deploy manifests
-       run: |
-         kubectl -n "${{ secrets.NAMESPACE }}" apply -f k8s/
+      - name: Ensure namespace
+        run: |
+          kubectl get ns "${{ secrets.NAMESPACE }}" >/dev/null 2>&1 || kubectl create ns "${{ secrets.NAMESPACE }}"
 
-     - name: Update image (rolling update)
-       run: |
-         kubectl -n "${{ secrets.NAMESPACE }}" set image deploy/test-app nginx=${{ env.IMAGE }}:${{ env.TAG }}
-         kubectl -n "${{ secrets.NAMESPACE }}" rollout status deploy/test-app
+      - name: Deploy manifests
+        run: |
+          kubectl -n "${{ secrets.NAMESPACE }}" apply -f k8s/
+
+      - name: Update image (rolling update)
+        run: |
+          kubectl -n "${{ secrets.NAMESPACE }}" set image deploy/test-app nginx=${{ env.IMAGE }}:${{ env.TAG }}
+          kubectl -n "${{ secrets.NAMESPACE }}" rollout status deploy/test-app
