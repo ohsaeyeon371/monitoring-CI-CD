@@ -47,7 +47,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
 
-    # ✅ 키는 GitHub Secrets에서만
+    # ✅ 키는 코드에 쓰지 말고, GitHub Secrets로만 전달
     env:
       NCLOUD_ACCESS_KEY: ${{ secrets.NCLOUD_ACCESS_KEY }}
       NCLOUD_SECRET_KEY: ${{ secrets.NCLOUD_SECRET_KEY }}
@@ -79,27 +79,22 @@ jobs:
           printf '%s' "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
-      # ✅ 핵심: 대화형 입력 막기 위해 ~/.ncloud/configure를 런타임 생성
-      # (코드에 키 하드코딩 X, secrets 값이 런타임에만 들어감)
-      - name: Write NCP credential file (non-interactive)
+      # ✅ authenticator가 ~/.ncloud 경로를 기대하는 케이스가 있어서 폴더만 생성(키 파일은 만들지 않음)
+      - name: Prepare ~/.ncloud
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p ~/.ncloud
-          # 값이 비어있으면 바로 실패시키기(헛돌지 않게)
-          if [ -z "${NCLOUD_ACCESS_KEY:-}" ] || [ -z "${NCLOUD_SECRET_KEY:-}" ]; then
-            echo "NCLOUD_ACCESS_KEY / NCLOUD_SECRET_KEY secrets are missing."
-            exit 1
-          fi
-          cat > ~/.ncloud/configure << EOF
-[DEFAULT]
-ncloud_access_key_id=${NCLOUD_ACCESS_KEY}
-ncloud_secret_access_key=${NCLOUD_SECRET_KEY}
-ncloud_region=KR
-ncloud_api_url=https://ncloud.apigw.ntruss.com
-EOF
-          chmod 600 ~/.ncloud/configure
 
+      # (선택) kubeconfig 정상 여부 확인
+      - name: Validate kubeconfig
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl version --client=true
+          kubectl config view --minify
+
+      # (선택) 연결성 체크: 여기서 timeout이면 NKS Private/ACL 이슈(ubuntu-latest로는 불가)
       - name: Cluster reachability check
         shell: bash
         run: |
