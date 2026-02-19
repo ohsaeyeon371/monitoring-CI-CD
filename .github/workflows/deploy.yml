@@ -47,39 +47,69 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
 
+    # kubectl step에서 사용할 NCP 인증키 (kubeconfig exec plugin이 필요로 함)
+    env:
+      NCLOUD_ACCESS_KEY: ${{ secrets.NCLOUD_ACCESS_KEY }}
+      NCLOUD_SECRET_KEY: ${{ secrets.NCLOUD_SECRET_KEY }}
+      NAMESPACE: ${{ secrets.NAMESPACE }}
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Install ncp-iam-authenticator (linux amd64)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o ncp-iam-authenticator \
+            https://github.com/NaverCloudPlatform/ncp-iam-authenticator/releases/latest/download/ncp-iam-authenticator_linux_amd64
+          chmod +x ncp-iam-authenticator
+          sudo mv ncp-iam-authenticator /usr/local/bin/ncp-iam-authenticator
+          ncp-iam-authenticator version
 
       - name: Setup kubeconfig
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p ~/.kube
           printf '%s' "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
-          head -n 5 ~/.kube/config
 
-      - name: Validate kubeconfig file
+      # 디버깅용(성공하면 지워도 됨): kubeconfig가 YAML인지, exec 플러그인이 보이는지 확인
+      - name: Validate kubeconfig
         shell: bash
         run: |
-          file ~/.kube/config || true
+          set -euo pipefail
+          head -n 8 ~/.kube/config
+          kubectl version --client=true
           kubectl config view --minify
-      
-      - name: Validate kubeconfig secret
+
+      # (선택) 클러스터 연결성 확인: 여기서 timeout 나면 NKS Private/ACL 이슈라 ubuntu-latest로는 불가
+      - name: Cluster reachability check
         shell: bash
         run: |
-          echo "len=${#KUBECONFIG_B64}"
-        env:
-          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
-          
+          set -euo pipefail
+          kubectl --request-timeout=10s get --raw=/readyz
+
       - name: Ensure namespace
+        shell: bash
         run: |
-          kubectl get ns "${{ secrets.NAMESPACE }}" >/dev/null 2>&1 || kubectl create ns "${{ secrets.NAMESPACE }}"
+          set -euo pipefail
+          kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE"
 
       - name: Deploy manifests
+        shell: bash
         run: |
-          kubectl -n "${{ secrets.NAMESPACE }}" apply -f k8s/
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" apply -f k8s/
 
-      - name: Update image
+      - name: Update image & rollout
+        shell: bash
         run: |
-          kubectl -n "${{ secrets.NAMESPACE }}" set image deploy/test-app nginx=${{ needs.build.outputs.image }}:${{ needs.build.outputs.tag }}
-          kubectl -n "${{ secrets.NAMESPACE }}" rollout status deploy/test-app
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" set image deploy/test-app nginx=${{ needs.build.outputs.image }}:${{ needs.build.outputs.tag }}
+          kubectl -n "$NAMESPACE" rollout status deploy/test-app --timeout=180s
