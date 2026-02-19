@@ -65,3 +65,5 @@ jobs:
         run: |
           kubectl -n "${{ secrets.NAMESPACE }}" set image deploy/test-app nginx=${{ env.IMAGE }}:${{ env.TAG }}
           kubectl -n "${{ secrets.NAMESPACE }}" rollout status deploy/test-app
+
+          
