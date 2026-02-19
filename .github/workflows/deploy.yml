@@ -57,7 +57,13 @@ jobs:
           printf '%s' "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
           head -n 5 ~/.kube/config
-          
+
+      - name: Validate kubeconfig file
+        shell: bash
+        run: |
+          file ~/.kube/config || true
+          kubectl config view --minify
+      
       - name: Validate kubeconfig secret
         shell: bash
         run: |
