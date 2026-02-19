@@ -47,7 +47,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
 
-    # kubectl step에서 사용할 NCP 인증키 (kubeconfig exec plugin이 필요로 함)
+    # ✅ 키는 코드에 쓰지 말고, GitHub Secrets로만 전달
     env:
       NCLOUD_ACCESS_KEY: ${{ secrets.NCLOUD_ACCESS_KEY }}
       NCLOUD_SECRET_KEY: ${{ secrets.NCLOUD_SECRET_KEY }}
@@ -61,14 +61,14 @@ jobs:
         with:
           version: "latest"
 
-      - name: Install ncp-iam-authenticator (linux amd64)
+      - name: Install ncp-iam-authenticator
         shell: bash
         run: |
           set -euo pipefail
           curl -fsSL -o ncp-iam-authenticator \
             https://github.com/NaverCloudPlatform/ncp-iam-authenticator/releases/latest/download/ncp-iam-authenticator_linux_amd64
           chmod +x ncp-iam-authenticator
-          sudo mv ncp-iam-authenticator /usr/local/bin/ncp-iam-authenticator
+          sudo mv ncp-iam-authenticator /usr/local/bin/
           ncp-iam-authenticator version
 
       - name: Setup kubeconfig
@@ -79,16 +79,22 @@ jobs:
           printf '%s' "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
-      # 디버깅용(성공하면 지워도 됨): kubeconfig가 YAML인지, exec 플러그인이 보이는지 확인
+      # ✅ authenticator가 ~/.ncloud 경로를 기대하는 케이스가 있어서 폴더만 생성(키 파일은 만들지 않음)
+      - name: Prepare ~/.ncloud
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ncloud
+
+      # (선택) kubeconfig 정상 여부 확인
       - name: Validate kubeconfig
         shell: bash
         run: |
           set -euo pipefail
-          head -n 8 ~/.kube/config
           kubectl version --client=true
           kubectl config view --minify
 
-      # (선택) 클러스터 연결성 확인: 여기서 timeout 나면 NKS Private/ACL 이슈라 ubuntu-latest로는 불가
+      # (선택) 연결성 체크: 여기서 timeout이면 NKS Private/ACL 이슈(ubuntu-latest로는 불가)
       - name: Cluster reachability check
         shell: bash
         run: |
