@@ -92,14 +92,14 @@ jobs:
             echo "NCLOUD secrets missing. Set NCLOUD_ACCESS_KEY / NCLOUD_SECRET_KEY in GitHub Secrets."
             exit 1
           fi
-
-          cat > ~/.ncloud/configure << EOF
-[DEFAULT]
-ncloud_access_key_id=${NCLOUD_ACCESS_KEY}
-ncloud_secret_access_key=${NCLOUD_SECRET_KEY}
-ncloud_region=KR
-ncloud_api_url=https://ncloud.apigw.ntruss.com
-EOF
+          # heredoc 대신 printf로 한 줄씩 생성 (YAML 안 깨짐)
+          printf '%s\n' "[DEFAULT]" \
+            "ncloud_access_key_id=${NCLOUD_ACCESS_KEY}" \
+            "ncloud_secret_access_key=${NCLOUD_SECRET_KEY}" \
+            "ncloud_region=KR" \
+            "ncloud_api_url=https://ncloud.apigw.ntruss.com" \
+            > ~/.ncloud/configure
+            
           chmod 600 ~/.ncloud/configure
 
       - name: Cluster reachability check
