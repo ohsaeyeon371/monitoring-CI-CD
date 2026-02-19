@@ -54,8 +54,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p ~/.kube
-          printf '%s' "${{ secrets.KUBECONFIG_B64 }}" | tr -d '\n\r ' | base64 -d > ~/.kube/config
+          printf '%s' "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
+          head -n 5 ~/.kube/config
+          
       - name: Validate kubeconfig secret
         shell: bash
         run: |
